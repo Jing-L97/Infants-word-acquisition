@@ -4,6 +4,8 @@ In Experiment 1, we tested different types of segmentation models(Accumulator; S
 In Experiment 2, episodic memory modules are incoporated in the LSTM model in order to simulate the top-down influence in langauge acquisition.  
 
 For model details, see:
+
+Experiment 1
 Accumulator: 
 Hidaka, S. (2013). A computational model associating learning process, word attributes, and age of acquisition. PLOS one, 8(11), e76242. https://journals.plos.org/plosone/article?id=10.1371/journal.pone.0076242
 
@@ -13,5 +15,7 @@ Algayres, R., Ricoul, T., Karadayi, J., Laurençon, H., Zaiem, S., Mohame, A., .
 STELA:
 Nguyen, T. A., de Seyssel, M., Algayres, R., Roze, P., Dunbar, E., & Dupoux, E. (2022). Are word boundaries useful for unsupervised language learning?. arXiv preprint arXiv:2210.02956. https://arxiv.org/abs/2210.02956
 
-episodic memory: 
+
+Experiment 2
+Episodic memory: 
 Fortunato, M., Tan, M., Faulkner, R., Hansen, S., Puigdomènech Badia, A., Buttimore, G., ... & Blundell, C. (2019). Generalization of reinforcement learners with working and episodic memory. Advances in neural information processing systems, 32. https://proceedings.neurips.cc/paper/2019/hash/02ed812220b0705fabb868ddbf17ea20-Abstract.html
