@@ -3,6 +3,9 @@ The current project aims to model infants' acquisition of vacabulary knowledge f
 In Experiment 1, we test different types of segmentation models(Accumulator; STELA; DP-Parsse) based on different levels of units(words; unsegmented pohonemes;raw speech) as inputs. 
 In Experiment 2, episodic memory modules are incoporated in the LSTM model in order to simulate the top-down influence in langauge acquisition.  
 
+Project progress:
+https://docs.google.com/spreadsheets/d/1u6DDvlb4E5FxxtPDV3KRQj4AjZ3wvxzYkExOt0gxv_I/edit?usp=sharing
+
 For model details, see:
 
 Experiment 1
