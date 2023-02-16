@@ -13,37 +13,49 @@ import pandas as pd
 import json
 import whisper
 
+
 '''
-load whisper asr model
+Step 1: ASR on subaudios using whisper
+
+input: tree_path, metadata_path, audio_directory, language
+    
+    1. tree_path  e.g."/scratch1/projects/InfTrain/dataset/trees"
+    2. metadata_path  e.g. '/scratch1/projects/InfTrain/dataset/metadata/matched2.csv'
+    3. audio_directory e.g.'/scratch1/projects/InfTrain/dataset/wav
+    4. language  e.g.'FR', "EN"
+
+output: 
+    1.subaudio transcriptions with the same name as the subaudio files in a folder named 'EN' or 'FR'
+    2.log.csv file for all the errors occurring in ASR process
+    3.path.csv file with the selcted audio files
 '''
+
+# we use the multilingual ASR model
 asr_model = whisper.load_model("base")
 
-
+# support func for sorting
 '''
-match audio with text name
-input: tree_path, metadata, audiopath
-output: pre-processed datafile and two jason files in correspondence with the audio files
-'''
-
-audio_path = './data/Sample_audio/1121/1812_LibriVox_en'
-text_path = './data/Text/LibriVox/adventures_jimmy_skunk_jl_librivox_64kb_mp3_text.txt'
-
+# this one is originally used for ASR part, possible to be integrated below
 def natural_keys(text):
     return [text.split('.')[-2].split('_')[-1]] 
+'''
 
-def transcribe_audio(tree_path, metadata_path,lang):
+def natural_keys(text):
+    return [text.split('.')[0].split('_')[-1]] 
+
+
+def transcribe_audio(tree_path, metadata_path, audio_directory, lang):
     '''
     step 1: get audio paths
     step 2: transcribe audios and save them in a folder
     
-    different languages: different sudio list; name suffix for the chosen file; asr model setting
+    different languages: different subaudio list; name suffix for the chosen file; asr model setting
     
     '''
     log_lst = []
     metadata = pd.read_csv(metadata_path)
-    #get the audion file name 
     
-    
+    # select the audio names from the json tree data
     if lang == 'EN':
         audio_suffix = r"\d+_LibriVox_en" 
         selected_lang = 'English'
@@ -70,7 +82,7 @@ def transcribe_audio(tree_path, metadata_path,lang):
         
     audio_path_lst = []
     for audio in audio_list_clean:
-            audio_path = '/scratch1/projects/InfTrain/dataset/wav/' + lang + '/' + metadata[metadata.book_id == audio]['speaker_id'].item().split(',')[0].split('\'')[1] + '/' + audio
+            audio_path = audio_directory + '/' + lang + '/' + metadata[metadata.book_id == audio]['speaker_id'].item().split(',')[0].split('\'')[1] + '/' + audio
             
             audio_path_lst.append(audio_path)
             
@@ -83,59 +95,49 @@ def transcribe_audio(tree_path, metadata_path,lang):
             # sort the audios so that it will ensure to get the first and last two
             subaudio_lst.sort(key=natural_keys)
             
-            
-            try: 
-                
+            try:                 
                 for subaudio in [subaudio_lst[0],subaudio_lst[1],subaudio_lst[-2],subaudio_lst[-1]]: 
                     result = asr_model.transcribe(audio_path + '/' + subaudio,fp16=False, language=selected_lang)
                     
                     # change the suffix by removing .wav
                     f = open(output_dir + '/'+ subaudio[:-4] + ".txt","w+")
-                    f.write(result["text"])
-                    
-            
+                    f.write(result["text"])            
             except:
                 log_lst.append(audio)
         
     # print out the history   
     log_csv = pd.DataFrame(log_lst)
     log_csv.to_csv(output_dir + '/'+ lang + "_log.csv", index=False, header=False)
-    
-    path_csv = pd.DataFrame(audio_path_lst)
-    
-    path_csv.to_csv(output_dir + '/'+ lang + "_audioPath.csv", index=False, header=False)
-     
+    path_csv = pd.DataFrame(audio_path_lst)    
+    path_csv.to_csv(output_dir + '/'+ lang + "_audioPath.csv", index=False, header=False) 
     return audio_path_lst
 
 
+'''
+Step 2: match the automatically recognized texts with textual data
+
+input: metadata_path, audio_path. text_path
+    For instance: 
+    tree_path = "/scratch1/projects/InfTrain/dataset/trees"
+    metadata_path = '/scratch1/projects/InfTrain/dataset/metadata/matched2.csv'
+    language = 'FR'
+
+output: subaudio transcriptions with the same name as the subaudio files
+
+'''
 
 
+# audio_path = './data/Sample_audio/1121/1812_LibriVox_en'
+# text_path = './data/Text/LibriVox/adventures_jimmy_skunk_jl_librivox_64kb_mp3_text.txt'
 
-def get_text(tree_path, metadata, language):
-    #get the audion file name 
-    with open(tree_path, 'r') as f:
-      data = json.load(f)
+def get_text(tree_path, metadata, language, audio_list):
     
-    if language == 'EN':
-        audio_list = re.findall(r"\d+_LibriVox_en",str(data))
-    
-    # save as the corresponding text files in the tree structure; useful for training !!!
-    
-    # remove duplicate audio files
-    audio_list_clean = list(set(audio_list)) 
-    
-    # find corresponding text files
+    # get the text list
     text_lst = []
-    for audio in audio_list_clean:
+    for audio in audio_list:
         text_lst.append(metadata[metadata.book_id == audio]['text_path'].item().split('/')[-1])
     return text_lst
 
-tree_path = './data/Trees/EN.json'
-metadata_path = './data/metadata/matched2.csv'
-language = 'EN'
-# read meta-data
-metadata = pd.read_csv(metadata_path)
-text_lst = get_text(tree_path, metadata, language)
 
 '''
 # not possible to base on only one word
@@ -143,36 +145,51 @@ text_lst = get_text(tree_path, metadata, language)
 # get the first matching location and remove the strings before that
 lower case for mamtching: this is plausible as it won't change the position of th certain char
 punc would possibly be a problem: only preserve ,.?!/'
--> for /'. do I need a special token of nthis? 
+-> for /'. do I need a special token of this? 
 -> try different conditions: 1.with punct; 2.withut punct; 3.with influential punct
 '''
 
-def matching_part(string1, string2):
-    m = len(string1)
-    n = len(string2)
+
+
+def matching_part(text, trans, section):
+    text_lowered = text.lower()
+    trans_lowered = trans.lower()
+
+    trans_lst = trans_lowered.split(" ")
+    key_lst = []
+    n = 0
+    while n < len(trans_lst):
+        string = ''
+        for word in trans_lst[n:n+5]:
+            string +=  word + ' '
+        key_lst.append(string[:-1])
+        
+        n += 1
+    text_index_lst = []
+    trans_index_lst = []
     
-    string1 = string1.lower()
-    string2 = string1.lower()
-    result = ""
-    
-    dp = [[0 for x in range(n + 1)] for y in range(m + 1)]
-    matched_lst = []
-    for i in range(m + 1):
-        for j in range(n + 1):
-            if i == 0 or j == 0:
-                dp[i][j] = 0
-            elif string1[i - 1] == string2[j - 1]:
-                dp[i][j] = dp[i - 1][j - 1] + 1              
-                result = string1[i - dp[i][j]: i]
-            else:
-                dp[i][j] = 0
-            # calulate the space to get # words  
-            # possible problem: here we also take the punctuation into account
-        if result.count(" ") >= 3:
-            matched_lst.append(result)        
+    for key in key_lst[:-4]:
+            # if there is matching part
+            if text_lowered.find(key) != -1:
+                text_index_lst.append(text_lowered.find(key))
+                trans_index_lst.append(trans_lowered.find(key))
+                
+    if section == "begin":
+        
+        if len(trans_index_lst) > 0:
+            matched = trans[:trans_index_lst[0]] + text[text_index_lst[0]:]
         else:
-            pass  
-    return matched_lst
+            matched = trans + text
+    
+    else:
+        
+        if len(trans_index_lst) > 0:
+            # attach them together: use the overlapping part as the anchoring 
+            matched = text[:text_index_lst[-1]] + trans[trans_index_lst[-1]:]
+        else:
+            matched = text + trans 
+        
+    return matched
 
 '''
 1st edition: remove all punct
@@ -195,28 +212,46 @@ def remove_format(line: str) -> str:
     non_letters_re = re.compile(r"[-%()€/#&=\[\]\^_<>$«°»\n\\]")
     return non_letters_re.sub(" ", line)
 
+
 '''
-Attention: here 
+return one cleaned file
+input: audio file name; text file name
+output: the cleaned text file
 '''
 
-def clean_trans(audio_path, text_path):
-  '''
-  subaudio_lst = []    
-  for file in os.listdir(audio_path):
-      filename = os.fsdecode(file)
-      subaudio_lst.append(filename)
-  '''
-  subaudio_lst = ['1812_LibriVox_en_seq_00.wav','1812_LibriVox_en_seq_01.wav','1812_LibriVox_en_seq_68.wav','1812_LibriVox_en_seq_69.wav']    
-
-  # only work on the first two and the last one
+def clean_trans(audio, trans_path, text_path, subaudio_directory,metadata,language):
+  # match the audio file with the corresponding subaudios
+  subaudio_lst = []
+  log_lst = []
+  for i in subaudio_directory:
+      
+      try:
+          audio_temp = i.split('.')[0].split('_')[:3]
+          file = audio_temp[0] +'_'+ audio_temp[1] + '_'+ audio_temp[2]
+          if file == audio:
+              subaudio_lst.append(i)
+              # sort the subaudios based on the sequence number
+      except:
+          if i == "EN_Log.txt" or 'EN_log.csv' or 'EN_audioPath.csv':
+              pass
+          else:
+             log_lst.append(i) 
+             
+  subaudio_lst.sort(key=natural_keys)
+  # get the script list
   script_lst = []
+  # trick: in the case of redundent transcriptions in En folders, taking the first and last two files would be safest choice
   for subaudio in [subaudio_lst[0],subaudio_lst[1],subaudio_lst[-2],subaudio_lst[-1]]: 
       #perform ASR on all the audio data
-      result = eng_asr_model.transcribe(subaudio)
-      script = result["text"]
-      script_lst.append(script.lower())
+      with open(trans_path + '/' + subaudio, encoding='UTF-8') as file:
+          script = file.read()
+          script_lst.append(script)
 
-  with open(text_path, encoding='UTF-8') as f:
+
+  # open the corresponding text file
+  text_file = metadata[metadata.book_id == audio]['text_path'].item().split('/')[-1]
+  text = text_path + '/' + text_file
+  with open(text, encoding='UTF-8') as f:
       # reading each line 
       lines = f.read()
       cleaned_word_temp = remove_format(lines) 
@@ -231,29 +266,60 @@ def clean_trans(audio_path, text_path):
       split into 2 and concatenate them
       opening and ending:added as extra
       '''
+      begin_trans = script_lst[0] + script_lst[1]
+      end_trans = script_lst[-2] + script_lst[-1]
       # second audio: used for match
-      overlap_start = matching_part(begin, script_lst[1])[0]    
-      # as the outputs are in the lower case, check this regardless of the case as well
-      start_index = begin.lower().find(overlap_start)
-      # remove the unnecessary part in the end
-      overlap_end = matching_part(end, script_lst[2])[-1] 
-      end_index = end.find(overlap_end)
-      matched = script_lst[0] + begin[start_index:] + end[:end_index] + script_lst[-1]
-      # save the file with the same name
+      overlap_start = matching_part(begin, begin_trans,"begin")
+      overlap_end = matching_part(end, end_trans,"end")
       
-  return matched
-
-audio_path = './data/Sample_audio/1121/1812_LibriVox_en'
-text_path = 'adventures_jimmy_skunk_jl_librivox_64kb_mp3_text.txt'
-
-matched = clean_trans(audio_path, text_path)
+      
+      matched = overlap_start + overlap_end
+      
+      # save the file with the same name
+      file = open('./cleaned/'+ language + '/' + text_file,"w+")
+      file.write(matched) 
+  
+  return log_lst
 
 '''
-this is only for one text 
+metadata_path = './Data/metadata/matched2.csv'        
+metadata = pd.read_csv(metadata_path)
+trans_path = './example'
+text_path = './Data/Text/LibriVox'
+
+audio = '4220_LibriVox_en'
+language = "EN"
+# get a list of subaudio filenames
+subaudio_directory = []    
+for file in os.listdir(trans_path):
+      filename = os.fsdecode(file)
+      subaudio_directory.append(filename)
+
+clean_trans(audio, trans_path, text_path, subaudio_directory,metadata,language)
 '''
-def preprocess_text(tree_path, metadata, language):
-    text_lst = get_text(tree_path, metadata, language)
-    
+
+
+metadata_path = '/scratch1/projects/InfTrain/dataset/metadata/matched2.csv'        
+metadata = pd.read_csv(metadata_path)
+trans_path = '/scratch2/jliu/STELAWord/ASR/EN'
+text_path = '/scratch1/projects/InfTrain/dataset/text/EN/LibriVox'
+language = "EN"
+# get a list of subaudio filenames
+subaudio_directory = []    
+for file in os.listdir(trans_path):
+      filename = os.fsdecode(file)
+      subaudio_directory.append(filename)
+      
+audio_lst = pd.read_csv('/scratch2/jliu/STELAWord/ASR/EN/EN_audioPath.csv',header = None)[0].tolist()
+log_lst = []
+for path in audio_lst:    
+    audio = path.split('/')[-1]
+    log = clean_trans(audio, trans_path, text_path, subaudio_directory,metadata,language)
+    if len(log) > 0:
+        log_lst.append(log)
+        
+log_csv = pd.DataFrame(log_lst)    
+log_csv.to_csv('./cleaned/'+ language + '/' + language + "_Log.csv", index=False, header=False) 
 
 '''
 
@@ -264,11 +330,6 @@ output: pre-processed datafile and two jason files in correspondence with the au
 '''
 
 
-def main():
-    preprocess_text(tree_path, metadata, language)
-    
-if __name__ == "__main__":
-    main()
 
 '''
 Q: additional processing steps for BPE model?
