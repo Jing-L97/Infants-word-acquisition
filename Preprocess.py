@@ -12,7 +12,7 @@ import re
 import pandas as pd
 import json
 import whisper
-
+import pysbd
 
 '''
 Step 1: ASR on subaudios using whisper
@@ -116,40 +116,16 @@ def transcribe_audio(tree_path, metadata_path, audio_directory, lang):
 '''
 Step 2: match the automatically recognized texts with textual data
 
-input: metadata_path, audio_path. text_path
-    For instance: 
-    tree_path = "/scratch1/projects/InfTrain/dataset/trees"
-    metadata_path = '/scratch1/projects/InfTrain/dataset/metadata/matched2.csv'
-    language = 'FR'
+input: 
+    audio_path = '/scratch2/jliu/STELAWord/ASR'
+    metadata_path = '/scratch1/projects/InfTrain/dataset/metadata/matched2.csv'       
+    trans_path = '/scratch2/jliu/STELAWord/ASR/EN'
+    text_path = '/scratch1/projects/InfTrain/dataset/text/EN/LibriVox'
+    language = "EN"
 
-output: subaudio transcriptions with the same name as the subaudio files
-
-'''
-
-
-# audio_path = './data/Sample_audio/1121/1812_LibriVox_en'
-# text_path = './data/Text/LibriVox/adventures_jimmy_skunk_jl_librivox_64kb_mp3_text.txt'
-
-def get_text(tree_path, metadata, language, audio_list):
-    
-    # get the text list
-    text_lst = []
-    for audio in audio_list:
-        text_lst.append(metadata[metadata.book_id == audio]['text_path'].item().split('/')[-1])
-    return text_lst
-
+output: a folder with pre-processed .txt files
 
 '''
-# not possible to base on only one word
-# rather, use 3-gram to locate the first matching part
-# get the first matching location and remove the strings before that
-lower case for mamtching: this is plausible as it won't change the position of th certain char
-punc would possibly be a problem: only preserve ,.?!/'
--> for /'. do I need a special token of this? 
--> try different conditions: 1.with punct; 2.withut punct; 3.with influential punct
-'''
-
-
 
 def matching_part(text, trans, section):
     text_lowered = text.lower()
@@ -192,7 +168,7 @@ def matching_part(text, trans, section):
     return matched
 
 '''
-1st edition: remove all punct
+version1: remove all punct
     reserved for model phonemization
 '''
 
@@ -203,7 +179,7 @@ def remove_punct(line: str) -> str:
     return non_letters_re.sub(" ", line)
 
 '''
-2nd edition: reserve punct supporting segmentations(!.,?:')
+version 2: reserve punct supporting segmentations(!.,?:')
     pay attention to the symbol \', might be a problem
 '''
 
@@ -281,60 +257,78 @@ def clean_trans(audio, trans_path, text_path, subaudio_directory,metadata,langua
   
   return log_lst
 
-'''
-metadata_path = './Data/metadata/matched2.csv'        
-metadata = pd.read_csv(metadata_path)
-trans_path = './example'
-text_path = './Data/Text/LibriVox'
-
-audio = '4220_LibriVox_en'
-language = "EN"
-# get a list of subaudio filenames
-subaudio_directory = []    
-for file in os.listdir(trans_path):
-      filename = os.fsdecode(file)
-      subaudio_directory.append(filename)
-
-clean_trans(audio, trans_path, text_path, subaudio_directory,metadata,language)
-'''
 
 
-metadata_path = '/scratch1/projects/InfTrain/dataset/metadata/matched2.csv'        
-metadata = pd.read_csv(metadata_path)
-trans_path = '/scratch2/jliu/STELAWord/ASR/EN'
-text_path = '/scratch1/projects/InfTrain/dataset/text/EN/LibriVox'
-language = "EN"
-# get a list of subaudio filenames
-subaudio_directory = []    
-for file in os.listdir(trans_path):
-      filename = os.fsdecode(file)
-      subaudio_directory.append(filename)
-      
-audio_lst = pd.read_csv('/scratch2/jliu/STELAWord/ASR/EN/EN_audioPath.csv',header = None)[0].tolist()
-log_lst = []
-for path in audio_lst:    
-    audio = path.split('/')[-1]
-    log = clean_trans(audio, trans_path, text_path, subaudio_directory,metadata,language)
-    if len(log) > 0:
-        log_lst.append(log)
-        
-log_csv = pd.DataFrame(log_lst)    
-log_csv.to_csv('./cleaned/'+ language + '/' + language + "_Log.csv", index=False, header=False) 
-
-'''
-
-match audio with text name
-input: tree_path, metadata, audiopath
-output: pre-processed datafile and two jason files in correspondence with the audio files
-
-'''
+def clean_all_trans(audio_path, trans_path, text_path, subaudio_directory,metadata_path,language):
+    
+    metadata = pd.read_csv(metadata_path)
+    # get a list of subaudio filenames
+    subaudio_directory = []    
+    for file in os.listdir(trans_path):
+          filename = os.fsdecode(file)
+          subaudio_directory.append(filename)
+          
+    audio_lst = pd.read_csv(audio_path + '/' + language + '/' + language + '_audioPath.csv',header = None)[0].tolist()
+    log_lst = []
+    for path in audio_lst:    
+        audio = path.split('/')[-1]
+        log = clean_trans(audio, trans_path, text_path, subaudio_directory,metadata,language)
+        if len(log) > 0:
+            log_lst.append(log)
+            
+    log_csv = pd.DataFrame(log_lst)    
+    log_csv.to_csv('./cleaned/'+ language + '/' + language + "_Log.csv", index=False, header=False) 
 
 
 
 '''
-Q: additional processing steps for BPE model?
-  word-based model only tokenization
+Step 3: Prepare for the char-LSTM: uppercased
+1. with boundaries
+2. without boundaries
+
+input: 
+    audio_path = '/scratch2/jliu/STELAWord/ASR'
+    metadata_path = '/scratch1/projects/InfTrain/dataset/metadata/matched2.csv'       
+    trans_path = '/scratch2/jliu/STELAWord/ASR/EN'
+    text_path = '/scratch1/projects/InfTrain/dataset/text/EN/LibriVox'
+    language = "EN"
+
+output: a folder with pre-processed .txt files
+
 '''
+
+'''
+input: raw text file
+output:uppercased; punctuation removed characters
+    
+'''
+condition = 'with'
+seg = pysbd.Segmenter(language="en", clean=False)
+text_path = "./Trial/EN"
+for file in os.listdir(text_path):
+    filename = os.fsdecode(file)
+    # create a cleaned file folder 
+    with open(text_path + "/" + filename, encoding='UTF-8') as f:
+        # reading each line 
+        lines = f.read()
+        # remove numbers and punctu
+        result = seg.segment(lines)
+        # add tab after each line
+        for sent in result:
+            clean = remove_punct(sent).upper() + "/t"
+            if condition == 'with':
+                # add "|" for word space
+            cleaned_word = cleaned_word_temp.split()
+        raw_text_temp.append(cleaned_word)
+
+with open(text_path + '/' + subaudio, encoding='UTF-8') as file:
+    script = file.read()
+    script_lst.append(script)
+
+text = "With haton his head, my name is Jonas E. @Smith. Please turn to p. 55."
+seg = pysbd.Segmenter(language="en", clean=False)
+print(seg.segment(text))
+
 #####################
 # word-preprocessing#
 #####################
