@@ -195,29 +195,50 @@ input: audio file name; text file name
 output: the cleaned text file
 '''
 
+def duplicate_index(test_list):
+    oc_set = set()
+    res = []
+    for idx, val in enumerate(test_list):
+        if val not in oc_set:
+            oc_set.add(val)         
+        else:
+            res.append(idx) 
+    return res
+
+
 def clean_trans(audio, trans_path, text_path, subaudio_directory,metadata,language):
   # match the audio file with the corresponding subaudios
   subaudio_lst = []
   log_lst = []
+  subaudio_name = []
   for i in subaudio_directory:
       
       try:
           audio_temp = i.split('.')[0].split('_')[:3]
           file = audio_temp[0] +'_'+ audio_temp[1] + '_'+ audio_temp[2]
+          # remove duplicate files
+          
           if file == audio:
               subaudio_lst.append(i)
+              subaudio_name.append(i.split('.')[0])
               # sort the subaudios based on the sequence number
       except:
           if i == "EN_Log.txt" or 'EN_log.csv' or 'EN_audioPath.csv':
               pass
           else:
              log_lst.append(i) 
-             
+  
+  dupli_index = duplicate_index(subaudio_name)
+  if len(dupli_index) > 0:
+      for index in sorted(dupli_index, reverse=True):
+          del subaudio_lst[index]  
+          
   subaudio_lst.sort(key=natural_keys)
   # get the script list
   script_lst = []
   # trick: in the case of redundent transcriptions in En folders, taking the first and last two files would be safest choice
-  for subaudio in [subaudio_lst[0],subaudio_lst[1],subaudio_lst[-2],subaudio_lst[-1]]: 
+  # in the case of the the incomplete transcriptions, use the extracted resuts directly
+  for subaudio in subaudio_lst: 
       #perform ASR on all the audio data
       with open(trans_path + '/' + subaudio, encoding='UTF-8') as file:
           script = file.read()
@@ -242,8 +263,10 @@ def clean_trans(audio, trans_path, text_path, subaudio_directory,metadata,langua
       split into 2 and concatenate them
       opening and ending:added as extra
       '''
-      begin_trans = script_lst[0] + script_lst[1]
-      end_trans = script_lst[-2] + script_lst[-1]
+      begin = ''
+      begin_trans = begin.join(script_lst[:-3])
+      end = ''
+      end_trans = end.join(script_lst[-2:])
       # second audio: used for match
       overlap_start = matching_part(begin, begin_trans,"begin")
       overlap_end = matching_part(end, end_trans,"end")
@@ -259,7 +282,7 @@ def clean_trans(audio, trans_path, text_path, subaudio_directory,metadata,langua
 
 
 
-def clean_all_trans(audio_path, trans_path, text_path, subaudio_directory,metadata_path,language):
+def clean_all_trans(audio_path, trans_path, text_path ,metadata_path,language):
     
     metadata = pd.read_csv(metadata_path)
     # get a list of subaudio filenames
@@ -279,55 +302,74 @@ def clean_all_trans(audio_path, trans_path, text_path, subaudio_directory,metada
     log_csv = pd.DataFrame(log_lst)    
     log_csv.to_csv('./cleaned/'+ language + '/' + language + "_Log.csv", index=False, header=False) 
 
-
+def get_text():
+    
+    return 
 
 '''
 Step 3: Prepare for the char-LSTM: uppercased
 1. with boundaries
 2. without boundaries
 
-input: 
-    audio_path = '/scratch2/jliu/STELAWord/ASR'
-    metadata_path = '/scratch1/projects/InfTrain/dataset/metadata/matched2.csv'       
-    trans_path = '/scratch2/jliu/STELAWord/ASR/EN'
-    text_path = '/scratch1/projects/InfTrain/dataset/text/EN/LibriVox'
+input:     
+    text_path = '/scratch2/jliu/STELAWord/data/preparation/cleaned/'
+    output_dir = '/scratch2/jliu/STELAWord/data/formated/'
     language = "EN"
-
+    condition = 'without'
 output: a folder with pre-processed .txt files
 
 '''
 
-'''
-input: raw text file
-output:uppercased; punctuation removed characters
+
+def pre_process(text_path, output_dir, language, condition):
+    if language == 'EN':
+        seg = pysbd.Segmenter(language="en", clean=False)
+    elif language == 'FR':
+        seg = pysbd.Segmenter(language="fr", clean=False)
     
-'''
-condition = 'with'
-seg = pysbd.Segmenter(language="en", clean=False)
-text_path = "./Trial/EN"
-for file in os.listdir(text_path):
-    filename = os.fsdecode(file)
-    # create a cleaned file folder 
-    with open(text_path + "/" + filename, encoding='UTF-8') as f:
-        # reading each line 
-        lines = f.read()
-        # remove numbers and punctu
-        result = seg.segment(lines)
-        # add tab after each line
-        for sent in result:
-            clean = remove_punct(sent).upper() + "/t"
-            if condition == 'with':
-                # add "|" for word space
-            cleaned_word = cleaned_word_temp.split()
-        raw_text_temp.append(cleaned_word)
+    text_path = text_path + language
+    output_dir = output_dir + language
+    if not(os.path.exists(output_dir)):
+        os.mkdir(output_dir)    
+    
+    
+    for file in os.listdir(text_path):
+        filename = os.fsdecode(file)
+        if filename.endswith('.txt'):
+            
+            # create a cleaned file folder 
+            with open(text_path  + "/" + filename, encoding='UTF-8') as f:
+                # reading each line 
+                lines = f.read()
+                # remove numbers and punctu
+                result = seg.segment(lines)
+                # add tab after each line
+                processed = []
+                for sent in result:
+                    temp = remove_punct(sent).upper() 
+                    # add boundary after each letter
+                    if condition == 'with':
+                        # replace blank with "|"
+                        clean_temp = temp.replace(" ", "|")[:-2]
+                        # remove redundent consecutive "|"
+                        clean = re.sub(r'\|{2,}', '|', clean_temp)
+                    else: 
+                        clean = temp
+                    # add space after each char
+                    cleaned = " ".join(clean)
+                    processed.append(cleaned)
+             
+              # save the processed files in a new folder with the same name 
+            with open(output_dir + '/' + filename, "w") as file:
+                for item in processed:
+                    file.write(item + "\n")
 
-with open(text_path + '/' + subaudio, encoding='UTF-8') as file:
-    script = file.read()
-    script_lst.append(script)
+        else:
+            pass
 
-text = "With haton his head, my name is Jonas E. @Smith. Please turn to p. 55."
-seg = pysbd.Segmenter(language="en", clean=False)
-print(seg.segment(text))
+
+
+
 
 #####################
 # word-preprocessing#
