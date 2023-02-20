@@ -19,6 +19,8 @@ Algayres, R., Ricoul, T., Karadayi, J., Laurençon, H., Zaiem, S., Mohame, A., .
 STELA:
 Nguyen, T. A., de Seyssel, M., Algayres, R., Roze, P., Dunbar, E., & Dupoux, E. (2022). Are word boundaries useful for unsupervised language learning?. arXiv preprint arXiv:2210.02956. https://arxiv.org/abs/2210.02956
 
+The model settings replicate the architecture in https://github.com/MarvinLvn/InfTrain
+
 
 Experiment 2
 
