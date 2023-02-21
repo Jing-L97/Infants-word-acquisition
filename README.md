@@ -1,6 +1,6 @@
 # Infants-word-acquisition
 The current project aims to model infants' acquisition of vacabulary knowledge from raw speech signals. 
-In Experiment 1, we test different types of segmentation models(Accumulator; STELA; DP-Parsse) based on different levels of units(words; unsegmented pohonemes;raw speech) as inputs. 
+In Experiment 1, we test different types of segmentation models(Accumulator; STELA; DP-Parse) based on different levels of units(words; unsegmented pohonemes;raw speech) as inputs. 
 In Experiment 2, episodic memory modules are incoporated in the LSTM model in order to simulate the top-down influence in langauge acquisition.  
 
 Project progress:
