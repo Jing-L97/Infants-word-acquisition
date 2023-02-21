@@ -13,6 +13,8 @@ import pandas as pd
 import json
 import whisper
 import pysbd
+import glob
+import string
 
 '''
 Step 1: ASR on subaudios using whisper
@@ -175,7 +177,7 @@ version1: remove all punct
 
 def remove_punct(line: str) -> str:
     """This function will remove any non-alphabetic characters from any of the texts"""
-    non_letters_re = re.compile(r"[@!'--\"%(),€./#:;&=?\[\]\^_<>$«°»\n\\]")
+    non_letters_re = re.compile(r"[@!--\"%(),€./#:;&=?\[\]\^_<>$«°»\n\\]")
     return non_letters_re.sub(" ", line)
 
 '''
@@ -302,9 +304,7 @@ def clean_all_trans(audio_path, trans_path, text_path ,metadata_path,language):
     log_csv = pd.DataFrame(log_lst)    
     log_csv.to_csv('./cleaned/'+ language + '/' + language + "_Log.csv", index=False, header=False) 
 
-def get_text():
-    
-    return 
+
 
 '''
 Step 3: Prepare for the char-LSTM: uppercased
@@ -368,8 +368,211 @@ def pre_process(text_path, output_dir, language, condition):
             pass
 
 
+'''
+Step 4: merge the data altogether for the autamic split following STELA
+
+input:     
+    trans_path = '/scratch2/jliu/STELAWord/data/preparation/cleaned/'
+    trans_path = '/scratch2/jliu/STELAWord/data/formated/'
+    condition = 'char_with_bound'
+    language = 'EN'
+    merge_file(trans_path,language,condition)
+    
+output: a .txt files containing all the processed files
+
+'''
+
+def merge_file(trans_path,language,condition): 
+    trans_path = trans_path + language + '/'+ condition + "/*.txt"
+    # Get a list of all text files in the directory
+    file_list = glob.glob(trans_path)
+    # Open the output file for writing
+    with open('preprocessed/' + language + '_' + condition + "_all.txt", "w") as outfile:
+        # Loop through the files and write their contents to the output file
+        for filename in file_list:
+            with open(filename, "r") as infile:
+                # Write the contents of the file to the output file
+                outfile.write(infile.read())
+                # Write the filename as a separator between files
+                outfile.write("\n")
+                
 
 
+'''
+Step 1-4 (alternative): take the raw .txt data directly and output the merged files
+input:
+    output_dir = '/scratch2/jliu/STELAWord/data/formated/'
+    lang = "EN"
+    condition = 'without'
+    text_path = '/scratch1/projects/InfTrain/dataset/text/'
+    tree_path = '/scratch1/projects/InfTrain/dataset/trees/'
+    metadata_path = '/scratch1/projects/InfTrain/dataset/metadata/matched2.csv'
+     
+    
+output: .txt file with merged files
+
+'''
+
+
+          
+def get_text(tree_path, metadata_path, output_dir, text_path, lang, condition):
+    
+    metadata = pd.read_csv(metadata_path)
+    tree = tree_path + lang + '.json'
+    # different tree files for different languages
+    with open(tree, 'r') as f:
+      data = json.load(f)
+    
+    # select the audio names from the json tree data
+    if lang == 'EN':
+        audio_suffix = r"\d+_LibriVox_en" 
+        seg = pysbd.Segmenter(language="en", clean=False)
+        text_path = text_path + lang + '/LibriVox/'
+    
+    elif lang == 'FR':
+        audio_suffix = r"\d+_LibriVox_fr|\d+_LitteratureAudio_fr" 
+        seg = pysbd.Segmenter(language="fr", clean=False)
+        # add the text_path for FR     !!!
+        
+        
+        # get audio file list
+    audio_list = re.findall(audio_suffix,str(data))
+        # remove duplicate
+    audio_list_clean = list(set(audio_list)) 
+    
+    
+    log_lst = []
+    for audio in audio_list_clean:
+        text_file = metadata[metadata.book_id == audio]['text_path'].item().split('/')[-1]
+        processed = []
+        try:
+            with open(text_path + text_file, encoding='UTF-8') as f:
+                # reading each line 
+                loaded = f.read()
+                
+                
+                # remove empty lines
+                # Split the string into lines
+                lines = loaded.splitlines()
+
+                # Remove empty lines using a list comprehension
+                non_empty_lines_lst = [line for line in lines if line.strip()]
+
+                # Join the remaining lines back into a single string
+                
+                non_empty_lines = ''.join(non_empty_lines_lst)
+                #remove empty lines
+                result = seg.segment(non_empty_lines)
+                
+                for sent in result:
+                    
+                    # Remove punctuations, numbers and other special tokens
+                    translator = str.maketrans('', '', string.punctuation+ string.digits)
+                    
+                    clean_string = sent.translate(translator)
+                    temp = clean_string.upper()
+                    
+                    # add boundary after each letter
+                    if condition == 'with':
+                        # replace blank with "|", no such punct in the end
+                        remove_lead = temp.lstrip()
+                        clean_temp = remove_lead.replace(" ", "|")[:-2]
+                        # remove redundent consecutive "|"
+                        clean = re.sub(r'\|{2,}', '|', clean_temp)
+                    else: 
+                        clean = temp.replace(" ", "")
+                    # add space after each char
+                    cleaned = " ".join(clean)
+                    processed.append(cleaned)
+            
+                    
+            with open(output_dir + lang + '/' + condition + '/' + text_file, "w", encoding='UTF-8') as file:
+                for item in processed:
+                    file.write(item + "\n")    
+        except:
+            log_lst.append(audio)
+    log_csv = pd.DataFrame(log_lst) 
+    log_csv.to_csv(output_dir + lang + '/' + condition + "_Log.csv", index=False, header=False) 
+  
+    
+'''
+lang = 'EN'
+condition = 'with'        
+metadata_path = './Data/metadata/matched2.csv'
+tree_path = './Data/trees/' 
+text_path = './Text_example/'
+output_dir = './Trial/'
+#get_text(tree_path, metadata_path, output_dir, text_path, lang, condition)
+'''
+
+
+
+'''
+prepare for the data in the corresponding data folder
+'''
+
+
+def create_directory(tree_path, metadata_path, text_path, lang, condition):
+    metadata = pd.read_csv(metadata_path)
+    tree = tree_path + lang + '.json'
+    # different tree files for different languages
+    with open(tree, 'r') as f:
+      data = json.load(f)
+    
+    # select the audio names from the json tree data
+    if lang == 'EN':
+        
+        text_path = text_path + lang + '/LibriVox/'
+    
+    elif lang == 'FR':
+        text_path = text_path + lang + '/LibriVox/'
+        
+    
+    # create the corresponding folders
+    with open(tree, 'r') as f:
+        data = json.load(f)
+    
+    for i in range(7):
+        folder_name = data[0]['contents'][i]['name']
+        os.makedirs(str(folder_name))
+        
+        for j in range(len(data[0]['contents'][i]['contents'])):
+            subfolder_name = data[0]['contents'][i]['contents'][j]['name']
+            os.makedirs(str(folder_name) + '/' + str(subfolder_name))
+            # put the files in the corresponding folders
+            filename_lst = []
+            log_lst = []
+            # output the merged file for each folder
+            with open(str(folder_name) + '/' + str(subfolder_name) + '/' + "All.txt", "w") as outfile:
+                for k in range(len(data[0]['contents'][i]['contents'][j]['contents'])):
+                    # put the filename in the corresponding folders
+                    audio = data[0]['contents'][i]['contents'][j]['contents'][k]['contents'][0]['name']
+                    # find the corresponding text files
+                    filename = metadata[metadata.book_id == audio]['text_path'].item().split('/')[-1]
+                    # merge the files
+                    try:
+                        with open(text_path + lang + '/' + condition + '/' + filename, "r") as infile:
+                        
+                            # Write the contents of the file to the output file
+                            outfile.write(infile.read())
+                            # Write the filename as a separator between files
+                            outfile.write("\n")
+                    except:
+                        log_lst.append(filename)
+                    filename_lst.append(filename)
+                    filename_csv = pd.DataFrame(filename_lst) 
+                    filename_csv.to_csv(str(folder_name) + '/' + str(subfolder_name) + '/' + "Filename.csv", index=False, header=False) 
+                    log_csv = pd.DataFrame(log_lst) 
+                    log_csv.to_csv(str(folder_name) + '/' + str(subfolder_name) + '/' + "Log.csv", index=False, header=False) 
+
+output_dir = '/scratch2/jliu/STELAWord/data/formated/'
+lang = "EN"
+condition = 'without'
+text_path = '/scratch1/projects/InfTrain/dataset/text/'
+tree_path = '/scratch1/projects/InfTrain/dataset/trees/'
+metadata_path = '/scratch1/projects/InfTrain/dataset/metadata/matched2.csv'
+    
+create_directory(tree_path, metadata_path, text_path, lang, condition)
 
 #####################
 # word-preprocessing#
