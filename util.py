@@ -164,7 +164,7 @@ def chunk_list(input_list, num_groups, target_medians, n):
     
     return final_subgroups
 
-(input_list, num_groups, target_medians, n)
+
 numbers = [1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12, 13, 14, 15, 16, 17, 18, 19, 20]
 medians = [5, 10, 15]
 chunked_lists = chunk_list(numbers, 3, medians,1)
