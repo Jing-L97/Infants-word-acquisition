@@ -5,6 +5,7 @@ In Experiment 2, episodic memory modules are incoporated in the LSTM model in or
 
 Project progress:
 slides: https://docs.google.com/presentation/d/1I0FDEHF-m56M2-lObM-_RlHLlo5c9E3l/edit?usp=share_link&ouid=105890723501072048365&rtpof=true&sd=true
+
 spreadsheet: https://docs.google.com/spreadsheets/d/1u6DDvlb4E5FxxtPDV3KRQj4AjZ3wvxzYkExOt0gxv_I/edit?usp=sharing
 
 ![image](https://user-images.githubusercontent.com/84009338/220105295-c06dca1c-1db4-4ff6-a1ef-4f68fb9414d7.png)
